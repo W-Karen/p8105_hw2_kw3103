@@ -1,21 +1,164 @@
 ---
-title: "Simple document"
-output: html_document
+title: "Homework 2"
+author: "Kairui Wang"
+date: "2023-09-30"
+output: github_document
 ---
 
-I'm an R Markdown document! 
 
-# Section 1
-
-Here's a **code chunk** that samples from 
-a _normal distribution_:
 
 ```{r}
-samp = rnorm(100)
-length(samp)
+library(tidyverse)
+library(readxl)
 ```
 
-# Section 2
+## Problem 1
 
-I can take the mean of the sample, too!
-The mean is `r mean(samp)`.
+1. Clean the data of 'pols-month'
+
+```{r}
+month_df = 
+  tibble(
+    month_num = 1:12,
+    month_abb = month.abb,
+    month = month.name
+  )
+
+pols_df =
+  read_csv("./data/pols-month.csv") |> 
+  janitor::clean_names() |> 
+  separate(col = mon, into = c("year", "month", "day"), sep = "-") |> 
+  mutate(
+    month = recode(
+      month,
+      "01" = "January",
+      "02" = "February",
+      "03" = "March",
+      "04" = "April",
+      "05" = "May",
+      "06" = "June",
+      "07" = "July",
+      "08" = "August",
+      "09" = "September",
+      "10" = "October",
+      "11" = "November",
+      "12" = "December") ) |> 
+  mutate(
+    presendent = 
+      case_when(prez_gop %in% c(1,2) ~"gop",
+                prez_dem == 1~"dem")
+  ) |> 
+  select(-prez_gop, -prez_dem, -day)
+  
+view(pols_df)
+```
+
+2. Clean the data of 'snp'
+
+```{r}
+snp_df =
+   read_csv("./data/snp.csv") |>
+  janitor::clean_names() |> 
+  separate(date, into = c("month", "day", "year"), sep = "/") |> 
+  subset(select = -day) |>
+  arrange(month) |>
+  mutate(
+    month = recode(
+      month,
+      "1" = "January",
+      "2" = "February",
+      "3" = "March",
+      "4" = "April",
+      "5" = "May",
+      "6" = "June",
+      "7" = "July",
+      "8" = "August",
+      "9" = "September",
+      "10" = "October",
+      "11" = "Nvember",
+      "12" = "December")) |>
+
+view(snp_df)
+```
+
+3. Tidy the data of `unemployment`
+
+```{r}
+unemployment_df = 
+  read_csv("./data/unemployment.csv") |>
+  rename(year = Year) |>
+  pivot_longer(
+    Jan:Dec, 
+    names_to = "month_abb",
+    values_to = "unemployment"
+  ) |> 
+  left_join(x = _, y = month_df) |> 
+  select(year, month, unemployment)
+
+view(unemployment_df)
+```
+
+merge the three datasets!
+
+```{r merge_538}
+data_538 = 
+  left_join(pols_df, snp_df) |>
+  left_join(x = _, y = unemployment_df)
+
+str(data_538)
+```
+
+
+## Problem 2
+
+1. Creat 'homes_powered' variable 
+
+```{r}
+MtrashW_df = 
+  read_excel("./data/202207 Trash Wheel Collection Data.xlsx", sheet = "Mr. Trash Wheel", range = "A2:N547") |>
+  janitor::clean_names() |>
+  mutate(
+    homes_powered = (
+      weight_tons*500/30
+    )
+  )
+
+MtrashW_df$Name = "Mr. Trash Wheel"
+
+```
+
+2. Clean and organize the data for Professor Trash Wheel and Gwynnda
+   Combine with the Mr. Trash Wheel dataset
+
+```{r}
+PtrashW_df = 
+  read_excel("./data/202207 Trash Wheel Collection Data.xlsx", sheet = "Professor Trash Wheel", range = "A2:M96") |>
+  janitor::clean_names() |>
+    mutate(
+    year = as.character(year),
+    homes_powered = (
+      weight_tons*500/30
+    )
+  )
+
+PtrashW_df$Name = "Professor Trash Wheel"
+
+
+Gwynnda_df = 
+  read_excel("./data/202207 Trash Wheel Collection Data.xlsx", sheet = "Gwynnda Trash Wheel", range = "A2:K108") |>
+  janitor::clean_names() |>
+    mutate(
+    year = as.character(year),
+    homes_powered = (
+      weight_tons*500/30
+    )
+  )
+Gwynnda_df$Name = "Gwynnda Trash Wheel"
+
+trash_tidy = 
+  bind_rows(MtrashW_df, PtrashW_df, Gwynnda_df) |>
+  janitor::clean_names() 
+
+trash_tidy = trash_tidy[, c("name", setdiff(names(trash_tidy), "name"))]
+```
+
