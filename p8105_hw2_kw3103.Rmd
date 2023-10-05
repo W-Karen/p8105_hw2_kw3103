@@ -7,7 +7,7 @@ output: github_document
 
 
 
-```{r}
+```{r, message = FALSE}
 library(tidyverse)
 library(readxl)
 ```
@@ -16,7 +16,7 @@ library(readxl)
 
 1. Clean the data of 'pols-month'
 
-```{r}
+```{r, message = FALSE}
 month_df = 
   tibble(
     month_num = 1:12,
@@ -24,66 +24,32 @@ month_df =
     month = month.name
   )
 
-pols_df =
-  read_csv("./data/pols-month.csv") |> 
-  janitor::clean_names() |> 
-  separate(col = mon, into = c("year", "month", "day"), sep = "-") |> 
+pols_df = 
+  read_csv("./data/pols-month.csv") |>
+  separate(mon, into = c("year", "month_num", "day"), convert = TRUE) |>
   mutate(
-    month = recode(
-      month,
-      "01" = "January",
-      "02" = "February",
-      "03" = "March",
-      "04" = "April",
-      "05" = "May",
-      "06" = "June",
-      "07" = "July",
-      "08" = "August",
-      "09" = "September",
-      "10" = "October",
-      "11" = "November",
-      "12" = "December") ) |> 
-  mutate(
-    presendent = 
-      case_when(prez_gop %in% c(1,2) ~"gop",
-                prez_dem == 1~"dem")
-  ) |> 
-  select(-prez_gop, -prez_dem, -day)
-  
-view(pols_df)
+    president = recode(prez_gop, "0" = "dem", "1" = "gop", "2" = "gop")) |>
+  left_join(x = _, y = month_df) |> 
+  select(year, month, everything(), -day, -starts_with("prez")) 
 ```
 
 2. Clean the data of 'snp'
 
-```{r}
+```{r, message = FALSE}
 snp_df =
-   read_csv("./data/snp.csv") |>
-  janitor::clean_names() |> 
-  separate(date, into = c("month", "day", "year"), sep = "/") |> 
-  subset(select = -day) |>
-  arrange(month) |>
+    read_csv(
+      "./data/snp.csv", 
+      col_types = cols(date = col_date(format = "%m/%d/%y"))) |>
+  separate(date, into = c("year", "month_num", "day"), convert = TRUE) |>
   mutate(
-    month = recode(
-      month,
-      "1" = "January",
-      "2" = "February",
-      "3" = "March",
-      "4" = "April",
-      "5" = "May",
-      "6" = "June",
-      "7" = "July",
-      "8" = "August",
-      "9" = "September",
-      "10" = "October",
-      "11" = "Nvember",
-      "12" = "December")) |>
-
-view(snp_df)
+    year = if_else(year > 2023, year - 100, year)) |> 
+  left_join(x = _, y = month_df) |> 
+  select(year, month, close) 
 ```
 
 3. Tidy the data of `unemployment`
 
-```{r}
+```{r, message = FALSE}
 unemployment_df = 
   read_csv("./data/unemployment.csv") |>
   rename(year = Year) |>
@@ -94,13 +60,11 @@ unemployment_df =
   ) |> 
   left_join(x = _, y = month_df) |> 
   select(year, month, unemployment)
-
-view(unemployment_df)
 ```
 
-merge the three datasets!
+4. Merge the three datasets
 
-```{r merge_538}
+```{r merge_538, message = FALSE}
 data_538 = 
   left_join(pols_df, snp_df) |>
   left_join(x = _, y = unemployment_df)
@@ -113,52 +77,113 @@ str(data_538)
 
 1. Creat 'homes_powered' variable 
 
-```{r}
-MtrashW_df = 
-  read_excel("./data/202207 Trash Wheel Collection Data.xlsx", sheet = "Mr. Trash Wheel", range = "A2:N547") |>
+```{r, message = FALSE}
+mr_df =
+  read_excel("./data/202309 Trash Wheel Collection Data.xlsx", sheet = 1, range = "A2:N586") |>
   janitor::clean_names() |>
   mutate(
-    homes_powered = (
-      weight_tons*500/30
-    )
+    year = as.character(year),
+    homes_powered = (weight_tons*500/30)
   )
-
-MtrashW_df$Name = "Mr. Trash Wheel"
-
 ```
 
 2. Clean and organize the data for Professor Trash Wheel and Gwynnda
-   Combine with the Mr. Trash Wheel dataset
 
-```{r}
-PtrashW_df = 
-  read_excel("./data/202207 Trash Wheel Collection Data.xlsx", sheet = "Professor Trash Wheel", range = "A2:M96") |>
+```{r, message = FALSE}
+prof_df =
+  read_excel("./data/202309 Trash Wheel Collection Data.xlsx", sheet = 2, range = "A2:M108") |>
   janitor::clean_names() |>
-    mutate(
+  mutate(
     year = as.character(year),
-    homes_powered = (
-      weight_tons*500/30
-    )
-  )
+    homes_powered = (weight_tons*500/30)
+  ) |> 
+  mutate(type = 'professor trash wheel')
 
-PtrashW_df$Name = "Professor Trash Wheel"
-
-
-Gwynnda_df = 
-  read_excel("./data/202207 Trash Wheel Collection Data.xlsx", sheet = "Gwynnda Trash Wheel", range = "A2:K108") |>
+gwyn_df =
+  read_excel("./data/202309 Trash Wheel Collection Data.xlsx", sheet = 4, range = "A2:L157") |>
   janitor::clean_names() |>
-    mutate(
+  mutate(
     year = as.character(year),
-    homes_powered = (
-      weight_tons*500/30
-    )
-  )
-Gwynnda_df$Name = "Gwynnda Trash Wheel"
-
-trash_tidy = 
-  bind_rows(MtrashW_df, PtrashW_df, Gwynnda_df) |>
-  janitor::clean_names() 
-
-trash_tidy = trash_tidy[, c("name", setdiff(names(trash_tidy), "name"))]
+    homes_powered = (weight_tons*500/30)
+  ) |> 
+  mutate(type = 'gwynnda trash wheel')
 ```
 
+```{r}
+mr_df = mutate(mr_df, type = 'mr trash wheel')
+```
+
+3. Combine with the Mr. Trash Wheel dataset
+
+```{r, message = FALSE}
+trash_df = 
+  full_join(mr_df, prof_df) |> 
+  full_join(gwyn_df)
+```
+
+The number of observations in `mr_df` dataset is `r nrow(mr_df)`. The names of key variables are: `r names(mr_df)`.
+
+The number of observations in `prof_df` dataset is `r nrow(prof_df)`. The names of key variables are: `r names(prof_df)`.
+
+The number of observations in `gwyn_df` dataset is `r nrow(gwyn_df)`. The names of key variables are: `r names(gwyn_df)`.
+
+The total weight of trash collected by Professor Trash Wheel is `r sum(pull(prof_df, weight_tons))` tons. The total number of cigarette butts collected by Gwynnda in July of 2021 is `r gwyn_df |> filter(year == 2021, month == 'July') |> pull(cigarette_butts) |> sum()`.
+
+
+
+## Problem 3
+
+1. Import, clean, and tidy the dataset of baseline demographics
+
+```{r, message = FALSE}
+baseline_df = 
+  read_csv("./data_mci/MCI_baseline.csv", skip = 1 ) |>
+  janitor::clean_names() |>
+  mutate( 
+    sex = as.factor(sex),
+    apoe4 = as.factor(apoe4)
+    ) |> 
+  filter(age_at_onset > current_age | age_at_onset == '.')
+
+```
+
+The number of observations that had an age of onset for MCI was `r nrow(baseline_df)`. 
+
+The average baseline age is `r baseline_df |> pull(current_age) |> mean() |> round(2)`. 
+
+A proportion of `r ((sum(pull(baseline_df, sex) == 0 & pull(baseline_df, apoe4) ==1)/sum(pull(baseline_df, sex) == 0))*100) |> round(2)` % of women in the study are APOE4 carriers.
+
+
+2.Import, clean, and tidy the dataset of longitudinally observed biomarker values
+
+```{r, message = FALSE}
+amyloid_df =
+  read_csv("./data_mci/mci_amyloid.csv", skip = 1) |>
+  janitor::clean_names() |>
+  pivot_longer(
+    time_2:time_8,
+    names_to = 'time',
+    values_to = 'amyloid_ratio'
+  ) |>
+  rename(id = study_id) |>
+  mutate(amyloid_ratio = as.numeric(amyloid_ratio))
+```
+
+The number of observations is `r nrow(amyloid_df)`. A total of `r length(setdiff(pull(baseline_df, id), pull(amyloid_df, id)))` participants appear in only the baseline dataset, and a total of `r length(setdiff(pull(amyloid_df, id), pull(baseline_df, id)))` participants appear in only the amyloid dataset. It suggests that there are unique 'id' values in each dataset that are not shared between the two datasets.
+
+
+3.Combine the demographic and biomarker datasets
+
+```{r, message = FALSE}
+MCI_df <- inner_join(baseline_df, amyloid_df, by = "id")
+```
+
+The resulting dataset has `r nrow(MCI_df)` observations and `r ncol(MCI_df)` variables.
+
+The average age at baseline for this group was `r round(mean(pull(MCI_df, current_age)), digits=2)` years.
+
+4.Saving the combined dataset as a csv file
+
+```{r, message = FALSE}
+write.csv(MCI_df, file = "data_mci/MCI_df.csv")
+```
